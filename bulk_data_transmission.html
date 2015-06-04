@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Bulk Data Transmission demo</title>
+</head>
+<body>
+
+<p>This uses the bulk data transmission extension defined in
+bulk_data_transmission.c (compiled to libbulk_data_transmission.so) to
+extend Crosswalk.</p>
+
+<div id="out">
+  <div id='sync' />
+  <div id='async' />
+</div>
+
+<script>
+var div = document.getElementById('out');
+var divAsync = document.getElementById('async');
+var divSync = document.getElementById('sync');
+
+var readableSize = function(size) {
+  var suffixCount = 0;
+  while (size >= 1024) {
+    size = size / 1024;
+    ++suffixCount;
+  }
+  size = size.toFixed(2);
+  var suffix;
+  switch(suffixCount) {
+  case 0:
+    suffix = 'B';
+    break;
+  case 1:
+    suffix = 'KB';
+    break;
+  case 2:
+    suffix = 'MB';
+    break;
+  case 3:
+    suffix = 'GB';
+    break;
+  case 4:
+    suffix = 'TB';
+    break;
+  default:
+    return nil;
+  }
+  return size + suffix;
+}
+
+var requestDataAsync = function(size) {
+  bulkData.requestBulkDataAsync(size, function(msg) {
+      var time_ms1 = msg.split('p')[0];
+      var time = new Date();
+      var time_ms2 = ((time.getHours()*60+time.getMinutes())*60+time.getSeconds())*1000+time.getMilliseconds();
+      var latency = time_ms2 - time_ms1;
+      var message = document.createElement('p');
+      message.innerText = 'Requested '
+        + readableSize(msg.length) + ' data chunk asynchronously';
+      message.innerText += '. Latency ' + latency + ' ms';
+      //message.innerText = msg;
+      divAsync.appendChild(message);
+    });
+}
+
+var requestDataSync = function(size) {
+  msg = bulkData.requestBulkDataSync(size);
+  var time_ms1 = msg.split('p')[0];
+  var time = new Date();
+  var time_ms2 = ((time.getHours()*60+time.getMinutes())*60+time.getSeconds())*1000+time.getMilliseconds();
+  var latency = time_ms2 - time_ms1;
+  var message = document.createElement('p');
+  message.innerText = 'Requested '
+    + readableSize(msg.length) + ' data chunk synchronously';
+  message.innerText += '. Latency ' + latency + ' ms';
+  //message.innerText = msg;
+  divSync.appendChild(message);
+}
+
+var startPow = 4;
+var maxPow = 26; // 26 is 64MB, which is the limit of IPC post message
+var repeatTimes = 2;
+
+var index = startPow * repeatTimes;
+
+function runTestCase() {
+  return new Promise(function(resolve) {
+      var size = Math.pow(2, Math.floor(index / repeatTimes));
+      requestDataAsync(size);
+      resolve();
+    }).then(function() {
+      ++index;
+      if (index == (maxPow + 1) * repeatTimes) {
+        document.title = "Pass";
+        return;
+      }
+      runTestCase();
+    }, function(e) {
+      console.error(e);
+      document.title = "Fail";
+    });
+}
+
+function runTestCaseSync() {
+  document.title = "Running";
+  var total = 0;
+  var start = new Date();
+  for(var i = index; i < (maxPow + 1) * repeatTimes; i++) {
+    var size = Math.pow(2, Math.floor(i / repeatTimes));
+    total += size;
+    requestDataSync(size);  
+  }
+  var stop = new Date();
+  var time = stop.getTime() - start.getTime();
+  var message = document.createElement('p');
+  message.innerText = 'total size ' + readableSize(total) + '; time ' + (time / 1000) + 's; bandwidth ' + readableSize(total / (time / 1000)) + '/s';
+  div.appendChild(message);
+  document.title = "Pass";
+}
+
+//runTestCase();
+runTestCaseSync();
+
+</script>
+</body>
+</html>
